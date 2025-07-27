@@ -1,0 +1,1649 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+  <title>Sewing Invoice Generator</title>
+  <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+  <style>
+    body { font-family: Arial, sans-serif; padding: 16px; background: #f0f0f0; }
+    .card { background: white; padding: 12px; margin-bottom: 12px; border-radius: 10px; box-shadow: 0 2px 4px rgba(0,0,0,0.08); position: relative; }
+    .row { display: flex; flex-wrap: wrap; gap: 12px; margin-bottom: 10px; }
+    .field { display: flex; align-items: center; flex: 1; min-width: 130px; }
+    .field label { font-weight: bold; margin-right: 6px; white-space: nowrap; }
+    .field input[type="text"],
+    .field input[type="number"],
+    .field input[type="date"],
+    .field input[type="file"],
+    .field input[type="password"],
+    .field select {
+      flex: 1; padding: 6px 8px; border: 1px solid #ccc; border-radius: 6px;
+    }
+    .button { background: #007bff; color: white; border: none; padding: 10px; width: 100%; border-radius: 6px; font-size: 16px; cursor: pointer; }
+    .button.secondary { background: #6c757d; margin-top: 8px; }
+    .button.danger { background: #dc3545; }
+    .button.success { background: #28a745; }
+    .button.small { padding: 2px 8px; font-size: 0.8em; width: auto; }
+    img.preview { max-width: 100px; max-height: 100px; display: block; margin-top: 6px; border: 1px solid #ddd; }
+    #history-modal, #pdf-modal, #pin-modal, #settings-modal, #import-export-modal { 
+      display: none; 
+      position: fixed; 
+      top: 0; left: 0; 
+      width: 100%; height: 100%; 
+      background: rgba(0,0,0,0.5); 
+      z-index: 1000; 
+      justify-content: center; 
+      align-items: center; 
+    }
+    #history-modal .card, #pdf-modal .card, #pin-modal .card, #settings-modal .card, #import-export-modal .card { 
+      width: 90%; max-width: 500px; 
+      max-height: 80vh; overflow-y: auto; 
+      padding: 20px;
+    }
+    #pdf-modal {
+      background: rgba(0,0,0,0.9);
+      text-align: center;
+    }
+    #pdf-viewer {
+      width: 90%;
+      height: 90%;
+      margin-top: 20px;
+      border: none;
+    }
+    .close-pdf {
+      position: absolute;
+      top: 20px;
+      right: 20px;
+      background: red;
+      color: white;
+      border: none;
+      padding: 10px;
+      cursor: pointer;
+    }
+    .history-item { 
+      margin-bottom: 8px; padding: 8px; 
+      border-bottom: 1px solid #eee; 
+      position: relative;
+    }
+    .history-actions {
+      display: flex;
+      gap: 5px;
+      margin-top: 6px;
+    }
+    .paid-toggle {
+      display: flex;
+      align-items: center;
+      gap: 5px;
+      margin-top: 5px;
+    }
+    .paid-toggle label {
+      font-size: 0.8em;
+      color: #666;
+    }
+    .paid-status {
+      font-size: 0.8em;
+      padding: 2px 5px;
+      border-radius: 3px;
+      background: #e9ecef;
+    }
+    .paid-status.paid {
+      background: #d4edda;
+      color: #155724;
+    }
+    .delete-invoice {
+      position: absolute;
+      top: 8px;
+      right: 8px;
+      background: transparent;
+      border: none;
+      color: #dc3545;
+      font-weight: bold;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    .pin-input {
+      margin: 15px 0;
+    }
+    .pin-input input {
+      text-align: center;
+      letter-spacing: 2px;
+      font-family: monospace;
+    }
+    .pin-buttons {
+      display: flex;
+      gap: 10px;
+    }
+    .modal-header {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      margin-bottom: 15px;
+    }
+    .modal-header-buttons {
+      display: flex;
+      gap: 8px;
+    }
+    #watermark-upload {
+      width: 150px;
+    }
+    #total-amount {
+      color: #28a745;
+      margin-left: 10px;
+    }
+    .payment-summary {
+      margin-top: 15px;
+      padding-top: 15px;
+      border-top: 1px solid #eee;
+      font-weight: bold;
+    }
+    .message {
+      padding: 10px;
+      margin: 10px 0;
+      border-radius: 5px;
+      display: none;
+    }
+    .message.error {
+      background-color: #f8d7da;
+      color: #721c24;
+      border: 1px solid #f5c6cb;
+      display: block;
+    }
+    .message.warning {
+      background-color: #fff3cd;
+      color: #856404;
+      border: 1px solid #ffeeba;
+      display: block;
+    }
+    .message.success {
+      background-color: #d4edda;
+      color: #155724;
+      border: 1px solid #c3e6cb;
+      display: block;
+    }
+    /* Settings tabs */
+    .settings-tabs {
+      display: flex;
+      border-bottom: 1px solid #ddd;
+      margin-bottom: 15px;
+    }
+    .settings-tab {
+      padding: 10px 15px;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+    }
+    .settings-tab.active {
+      border-bottom: 2px solid #007bff;
+      font-weight: bold;
+    }
+    .settings-tab-content {
+      display: none;
+    }
+    .settings-tab-content.active {
+      display: block;
+    }
+    /* Services management */
+    .services-list {
+      max-height: 300px;
+      overflow-y: auto;
+      margin-bottom: 15px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+    }
+    .service-item {
+      padding: 10px;
+      border-bottom: 1px solid #eee;
+      display: flex;
+      align-items: center;
+    }
+    .service-item:last-child {
+      border-bottom: none;
+    }
+    .service-item:hover {
+      background-color: #f5f5f5;
+    }
+    .service-details {
+      flex: 1;
+    }
+    .service-category {
+      font-weight: bold;
+      color: #333;
+    }
+    .service-description {
+      color: #555;
+    }
+    .service-price {
+      color: #28a745;
+      font-weight: bold;
+      margin: 0 10px;
+    }
+    .service-unit {
+      color: #6c757d;
+      font-size: 0.9em;
+    }
+    .service-actions {
+      display: flex;
+      gap: 5px;
+    }
+    .service-edit-btn, .service-delete-btn {
+      padding: 3px 8px;
+      font-size: 0.8em;
+    }
+    /* Add/edit service form */
+    .service-form {
+      margin-top: 20px;
+      padding: 15px;
+      background-color: #f8f9fa;
+      border-radius: 5px;
+    }
+    .service-form h4 {
+      margin-top: 0;
+    }
+    .service-form .row {
+      margin-bottom: 10px;
+    }
+    .service-form-buttons {
+      display: flex;
+      gap: 10px;
+      margin-top: 10px;
+    }
+    .service-form-buttons .button {
+      flex: 1;
+    }
+    /* Import/Export styles */
+    .import-export-tabs {
+      display: flex;
+      border-bottom: 1px solid #ddd;
+      margin-bottom: 15px;
+    }
+    .import-export-tab {
+      padding: 10px 15px;
+      cursor: pointer;
+      border-bottom: 2px solid transparent;
+    }
+    .import-export-tab.active {
+      border-bottom: 2px solid #007bff;
+      font-weight: bold;
+    }
+    .import-export-tab-content {
+      display: none;
+    }
+    .import-export-tab-content.active {
+      display: block;
+    }
+    .data-textarea {
+      width: 100%;
+      height: 200px;
+      margin-bottom: 10px;
+      padding: 8px;
+      border: 1px solid #ddd;
+      border-radius: 5px;
+      font-family: monospace;
+    }
+    .sort-options {
+      margin-bottom: 15px;
+    }
+    .sort-options select {
+      padding: 6px;
+      border-radius: 4px;
+      border: 1px solid #ccc;
+    }
+    @media (max-width: 600px) {
+      .row { flex-direction: column; }
+      .field { width: 100%; }
+      .modal-header {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .modal-header-buttons {
+        margin-top: 10px;
+        align-self: flex-end;
+      }
+      .pin-buttons {
+        flex-direction: column;
+      }
+      .pin-buttons .button {
+        width: 100%;
+      }
+      .service-item {
+        flex-direction: column;
+        align-items: flex-start;
+      }
+      .service-actions {
+        margin-top: 5px;
+        align-self: flex-end;
+      }
+    }
+  </style>
+</head>
+<body>
+
+<h2 style="margin-bottom: 10px;">Sewing Invoice Generator</h2>
+
+<div class="card">
+  <div class="field">
+    <label>Watermark Image</label>
+    <input type="file" id="watermark-upload" accept="image/*">
+  </div>
+  <img id="watermark-preview" class="preview" style="display:none;">
+  <button class="button secondary" onclick="clearWatermark()" style="display:none;" id="clear-watermark">Remove Watermark</button>
+</div>
+
+<div class="card">
+  <div class="row">
+    <div class="field"><label>Invoice #</label><input type="text" id="invoice-number" value="INV-001"></div>
+    <div class="field"><label>Date</label><input type="date" id="invoice-date"></div>
+  </div>
+</div>
+
+<div class="card">
+  <h4 style="margin-bottom: 8px;">From</h4>
+  <div class="row">
+    <div class="field"><label>Name</label><input type="text" id="from-name" value="Kulwinder Kaur"></div>
+  </div>
+</div>
+
+<div class="card">
+  <h4 style="margin-bottom: 8px;">To</h4>
+  <div class="row">
+    <div class="field"><label>Company</label><input type="text" id="to-company" value="Expandtrack"></div>
+    <div class="field"><label>Customer</label><input type="text" id="to-name"></div>
+  </div>
+</div>
+
+<div id="items-container"></div>
+<button class="button" onclick="addItem()">+ Add Service</button>
+
+<div class="card">
+  <div class="row">
+    <div class="field" style="flex: 1; justify-content: flex-end;">
+      <label style="font-size: 1.2em; font-weight: bold;">Total Amount:</label>
+      <span id="total-amount" style="font-size: 1.2em; font-weight: bold;">$0.00</span>
+    </div>
+  </div>
+</div>
+
+<div class="card">
+  <button class="button" onclick="generatePDF()">Download PDF</button>
+  <button class="button secondary" onclick="showHistory()">View History</button>
+  <button class="button secondary" onclick="showImportExport()">Import/Export</button>
+  <button class="button secondary" onclick="showSettings()">Settings</button>
+  <button class="button danger" onclick="clearForm()">Clear Form</button>
+</div>
+
+<!-- History Modal -->
+<div id="history-modal">
+  <div class="card">
+    <div class="modal-header">
+      <h3>Invoice History</h3>
+      <div class="modal-header-buttons">
+        <button class="button danger small" onclick="showClearHistoryConfirmation()">Clear All</button>
+        <button class="button small" onclick="hideHistory()">Close</button>
+      </div>
+    </div>
+    <div class="sort-options">
+      <label>Sort by:</label>
+      <select id="history-sort" onchange="sortHistory()">
+        <option value="date-desc">Date (Newest First)</option>
+        <option value="date-asc">Date (Oldest First)</option>
+        <option value="number-desc">Invoice # (Descending)</option>
+        <option value="number-asc">Invoice # (Ascending)</option>
+        <option value="amount-desc">Amount (High to Low)</option>
+        <option value="amount-asc">Amount (Low to High)</option>
+      </select>
+    </div>
+    <div id="history-list"></div>
+    <div id="payment-summary" class="payment-summary" style="display: none;">
+      Total Payment Received: <span id="total-received">$0.00</span>
+    </div>
+  </div>
+</div>
+
+<!-- PDF Viewer Modal -->
+<div id="pdf-modal">
+  <button class="close-pdf" onclick="hidePDF()">Close</button>
+  <iframe id="pdf-viewer"></iframe>
+</div>
+
+<!-- PIN Modal -->
+<div id="pin-modal">
+  <div class="card">
+    <h3 id="pin-modal-title">Enter PIN</h3>
+    <div class="pin-input">
+      <input type="password" id="pin-input" maxlength="4" placeholder="1234">
+    </div>
+    <div class="pin-buttons">
+      <button class="button" id="pin-confirm">Confirm</button>
+      <button class="button secondary" onclick="hidePinModal()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- Settings Modal -->
+<div id="settings-modal">
+  <div class="card">
+    <div class="modal-header">
+      <h3>Settings</h3>
+      <button class="button small" onclick="hideSettings()">Close</button>
+    </div>
+    
+    <div class="settings-tabs">
+      <div class="settings-tab active" onclick="switchSettingsTab('pin-tab')">Change PIN</div>
+      <div class="settings-tab" onclick="switchSettingsTab('services-tab')">Manage Services</div>
+    </div>
+    
+    <!-- PIN Tab -->
+    <div id="pin-tab" class="settings-tab-content active">
+      <div id="pin-change-message" class="message"></div>
+      
+      <div class="field">
+        <label>Current PIN</label>
+        <input type="password" id="current-pin" maxlength="4" placeholder="Current PIN">
+      </div>
+      
+      <div class="field">
+        <label>New PIN</label>
+        <input type="password" id="new-pin" maxlength="4" placeholder="New PIN">
+      </div>
+      
+      <div class="field">
+        <label>Confirm New PIN</label>
+        <input type="password" id="confirm-pin" maxlength="4" placeholder="Confirm New PIN">
+      </div>
+      
+      <button class="button" onclick="changePin()">Change PIN</button>
+      <button class="button secondary" onclick="forgotPin()">Forgot PIN?</button>
+    </div>
+    
+    <!-- Services Tab -->
+    <div id="services-tab" class="settings-tab-content">
+      <h4>Current Services</h4>
+      <div class="services-list" id="services-list">
+        <!-- Services will be populated here -->
+      </div>
+      
+      <div class="service-form" id="service-form">
+        <h4 id="service-form-title">Add New Service</h4>
+        <div class="row">
+          <div class="field">
+            <label>Category</label>
+            <input type="text" id="service-category" placeholder="e.g., Curtains, Voile">
+          </div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label>Description</label>
+            <input type="text" id="service-description" placeholder="Service description">
+          </div>
+        </div>
+        <div class="row">
+          <div class="field">
+            <label>Price</label>
+            <input type="number" id="service-price" step="0.01" min="0" placeholder="0.00">
+          </div>
+          <div class="field">
+            <label>Unit</label>
+            <input type="text" id="service-unit" placeholder="e.g., Per Set, Each">
+          </div>
+        </div>
+        <div class="service-form-buttons">
+          <button class="button" id="service-save-btn" onclick="saveService()">Save Service</button>
+          <button class="button secondary" id="service-cancel-btn" onclick="cancelServiceEdit()" style="display:none;">Cancel</button>
+        </div>
+      </div>
+    </div>
+  </div>
+</div>
+
+<!-- Import/Export Modal -->
+<div id="import-export-modal">
+  <div class="card">
+    <div class="modal-header">
+      <h3>Import/Export Data</h3>
+      <button class="button small" onclick="hideImportExport()">Close</button>
+    </div>
+    
+    <div class="import-export-tabs">
+      <div class="import-export-tab active" onclick="switchImportExportTab('export-tab')">Export</div>
+      <div class="import-export-tab" onclick="switchImportExportTab('import-tab')">Import</div>
+    </div>
+    
+    <!-- Export Tab -->
+    <div id="export-tab" class="import-export-tab-content active">
+      <p>Export your invoice data to a file for backup or transfer:</p>
+      <textarea id="export-data" class="data-textarea" readonly></textarea>
+      <button class="button" onclick="exportData()">Export to File</button>
+      <button class="button secondary" onclick="copyToClipboard('export-data')">Copy to Clipboard</button>
+    </div>
+    
+    <!-- Import Tab -->
+    <div id="import-tab" class="import-export-tab-content">
+      <div id="import-message" class="message"></div>
+      <p>Import invoice data from a backup file or paste the data below:</p>
+      <input type="file" id="import-file" accept=".json,.txt" style="margin-bottom: 10px;">
+      <textarea id="import-data" class="data-textarea" placeholder="Paste your JSON data here..."></textarea>
+      <button class="button" onclick="importData()">Import Data</button>
+      <button class="button secondary" onclick="document.getElementById('import-data').value = ''">Clear</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// Initialize jsPDF
+const { jsPDF } = window.jspdf;
+let invoices = JSON.parse(localStorage.getItem('invoices')) || [];
+let watermarkData = localStorage.getItem('watermarkImage') || null;
+let currentInvoiceNumber = localStorage.getItem('currentInvoiceNumber') || 'INV-001';
+let currentPin = localStorage.getItem('appPin') || '1234';
+let currentPinAction = null;
+let currentInvoiceId = null;
+let currentEditingServiceIndex = -1;
+
+// Load services from localStorage or use default
+let sewingServices = JSON.parse(localStorage.getItem('sewingServices')) || [
+  { category: 'Curtains', description: 'Change Headings to Pleated', price: 20, unit: 'Per Set' },
+  { category: 'Curtains', description: 'Joins (includes Lining)', price: 20, unit: 'Each' },
+  { category: 'Curtains', description: 'Shortening (Includes Lining)', price: 25, unit: 'Per Set' },
+  { category: 'Curtains', description: 'Fixing a Puckered Side', price: 10, unit: 'Each' },
+  { category: 'Curtains', description: 'Fixing/Turning a Side', price: 10, unit: 'Each' },
+  { category: 'Curtains', description: 'Adding lining to heading', price: 20, unit: 'Per Set' },
+  { category: 'Curtains', description: 'Continuous Hooking Tape', price: 15, unit: 'Per Set' },
+  { category: 'Curtains', description: 'Change heading to Nil heading', price: 15, unit: 'Per Set' },
+  { category: 'Curtains', description: 'Reverse Fabric', price: 25, unit: 'Per Set' },
+  { category: 'Curtains', description: 'Angled shortening (Includes Lining)', price: 30, unit: 'Per Set' },
+  { category: 'Voile', description: 'Shortening', price: 12.50, unit: 'Per Set / Panel' },
+  { category: 'Voile', description: 'Joins (Stock Voile)', price: 10.00, unit: 'Per Join' },
+  { category: 'Voile', description: 'Ironing', price: 10.00, unit: 'Per Set / Panel' },
+  { category: 'Voile', description: 'Inverted Pleat', price: 16.00, unit: 'Per Set / Panel' },
+  { category: 'Voile', description: 'Moving tape up', price: 16.00, unit: 'Per Set / Panel' },
+  { category: 'Voile', description: 'Adding lining to the back of voiles', price: 15.00, unit: 'Per Set / Panel' },
+  { category: 'Voile', description: 'Resew a side on voile', price: 7.00, unit: 'Per Side' },
+  { category: 'Lining', description: 'Shortening', price: 15.00, unit: 'Per Set / Panel' },
+  { category: 'Lining', description: 'Joins', price: 10.00, unit: 'Per Set / Panel' },
+  { category: 'Lining', description: 'Pleating', price: 16.00, unit: 'Per Set / Panel' },
+  { category: 'Lining', description: 'Ironing', price: 15.00, unit: 'Per Set / Panel' },
+  { category: 'Others', description: 'Tiebacks', price: 15.00, unit: 'Each' },
+  { category: 'Others', description: 'Cushions', price: 12.00, unit: 'Each' }
+];
+
+// Save default services if none exist
+if (!localStorage.getItem('sewingServices')) {
+  localStorage.setItem('sewingServices', JSON.stringify(sewingServices));
+}
+
+// Format date as dd/mm/yyyy
+function formatDate(dateString) {
+  if (!dateString) return '';
+  const [year, month, day] = dateString.split('-');
+  return `${day}/${month}/${year}`;
+}
+
+// Calculate total for an invoice
+function calculateInvoiceTotal(items) {
+  return items.reduce((total, item) => {
+    const qty = parseFloat(item.qty || 0);
+    const price = parseFloat(item.price || 0);
+    return total + (qty * price);
+  }, 0);
+}
+
+// Set today's date automatically
+function setCurrentDate() {
+  const today = new Date();
+  const formattedDate = today.toISOString().split('T')[0];
+  document.getElementById('invoice-date').value = formattedDate;
+}
+
+// Get current invoice number without incrementing
+function getCurrentInvoiceNumber() {
+  return currentInvoiceNumber;
+}
+
+// Get and increment invoice number
+function getAndIncrementInvoiceNumber() {
+  const matches = currentInvoiceNumber.match(/\d+/);
+  const num = matches ? parseInt(matches[0]) : 1;
+  const currentNumber = `INV-${num.toString().padStart(3, '0')}`;
+  currentInvoiceNumber = `INV-${(num + 1).toString().padStart(3, '0')}`;
+  localStorage.setItem('currentInvoiceNumber', currentInvoiceNumber);
+  return currentNumber;
+}
+
+// Calculate and update the total amount
+function updateTotalAmount() {
+  let total = 0;
+  const items = document.querySelectorAll('#items-container .card');
+  
+  items.forEach(card => {
+    const qty = parseFloat(card.querySelector('.qty').value || 0);
+    const price = parseFloat(card.querySelector('.price').value || 0);
+    total += qty * price;
+  });
+  
+  document.getElementById('total-amount').textContent = `$${total.toFixed(2)}`;
+}
+
+// Add new service row with optimized layout
+function addItem(serviceIndex = -1, qty = '', price = '') {
+  const container = document.getElementById('items-container');
+  const div = document.createElement('div');
+  div.className = 'card';
+  
+  let serviceOptions = '<option value="">Select Service</option>';
+  
+  // Group services by category
+  const categories = {};
+  sewingServices.forEach((service, index) => {
+    if (!categories[service.category]) {
+      categories[service.category] = [];
+    }
+    categories[service.category].push({index, service});
+  });
+  
+  // Create optgroups for each category
+  for (const category in categories) {
+    serviceOptions += `<optgroup label="${category}">`;
+    categories[category].forEach(({index, service}) => {
+      const selected = serviceIndex === index ? 'selected' : '';
+      serviceOptions += `<option value="${index}" ${selected} data-price="${service.price}">
+        ${service.description}
+      </option>`;
+    });
+    serviceOptions += '</optgroup>';
+  }
+  
+  div.innerHTML = `
+    <div class="row">
+      <div class="field">
+        <label>Service</label>
+        <select class="service-select" onchange="updatePrice(this)">
+          ${serviceOptions}
+        </select>
+      </div>
+      <div class="field">
+        <label>Qty</label>
+        <input type="number" class="qty" min="0" value="${qty}" placeholder="0" oninput="updateTotalAmount()">
+      </div>
+      <div class="field">
+        <label>Price</label>
+        <input type="number" class="price" min="0" step="0.01" value="${price || (serviceIndex >= 0 ? sewingServices[serviceIndex].price : '')}" placeholder="0.00" oninput="updateTotalAmount()">
+      </div>
+    </div>
+    <div class="field unit-display" style="font-size: 0.8em; color: #666; margin-top: 5px; display: ${serviceIndex >= 0 ? 'block' : 'none'}">
+      Unit: ${serviceIndex >= 0 ? sewingServices[serviceIndex].unit : ''}
+    </div>
+  `;
+  container.appendChild(div);
+  updateTotalAmount();
+}
+
+// Update price when service is selected
+function updatePrice(selectElement) {
+  const row = selectElement.closest('.row');
+  const priceInput = row.querySelector('.price');
+  const unitDisplay = row.nextElementSibling;
+  const selectedIndex = selectElement.value;
+  
+  if (selectedIndex >= 0) {
+    const service = sewingServices[selectedIndex];
+    priceInput.value = service.price;
+    unitDisplay.textContent = `Unit: ${service.unit}`;
+    unitDisplay.style.display = 'block';
+  } else {
+    priceInput.value = '';
+    unitDisplay.style.display = 'none';
+  }
+  updateTotalAmount();
+}
+
+// Clear the entire form
+function clearForm() {
+  if (confirm('Are you sure you want to clear the form? All unsaved data will be lost.')) {
+    document.getElementById('items-container').innerHTML = '';
+    document.getElementById('invoice-number').value = getCurrentInvoiceNumber();
+    setCurrentDate();
+    document.getElementById('from-name').value = 'Kulwinder Kaur';
+    document.getElementById('to-company').value = 'Expandtrack';
+    document.getElementById('to-name').value = '';
+    addItem();
+    updateTotalAmount();
+  }
+}
+
+// Handle watermark image upload
+document.getElementById('watermark-upload').addEventListener('change', function(e) {
+  const file = e.target.files[0];
+  if (file) {
+    const reader = new FileReader();
+    reader.onload = function(e) {
+      watermarkData = e.target.result;
+      localStorage.setItem('watermarkImage', watermarkData);
+      document.getElementById('watermark-preview').src = watermarkData;
+      document.getElementById('watermark-preview').style.display = 'block';
+      document.getElementById('clear-watermark').style.display = 'block';
+    };
+    reader.readAsDataURL(file);
+  }
+});
+
+// Clear watermark
+function clearWatermark() {
+  watermarkData = null;
+  localStorage.removeItem('watermarkImage');
+  document.getElementById('watermark-preview').style.display = 'none';
+  document.getElementById('clear-watermark').style.display = 'none';
+  document.getElementById('watermark-upload').value = '';
+}
+
+// Save invoice to history
+function saveInvoice() {
+  const invoice = {
+    id: Date.now(),
+    number: document.getElementById('invoice-number').value,
+    date: document.getElementById('invoice-date').value,
+    from: document.getElementById('from-name').value,
+    toCompany: document.getElementById('to-company').value,
+    toName: document.getElementById('to-name').value,
+    items: Array.from(document.querySelectorAll('#items-container .card')).map(card => {
+      const serviceSelect = card.querySelector('.service-select');
+      const serviceIndex = serviceSelect ? serviceSelect.value : -1;
+      return {
+        serviceIndex: serviceIndex,
+        desc: serviceIndex >= 0 ? sewingServices[serviceIndex].description : '',
+        qty: card.querySelector('.qty').value,
+        price: card.querySelector('.price').value,
+        unit: serviceIndex >= 0 ? sewingServices[serviceIndex].unit : ''
+      };
+    }),
+    watermark: watermarkData,
+    paid: false
+  };
+  invoices.unshift(invoice);
+  localStorage.setItem('invoices', JSON.stringify(invoices));
+}
+
+// Show PIN modal for protected actions
+function showPinModal(action, invoiceId = null) {
+  currentPinAction = action;
+  currentInvoiceId = invoiceId;
+  
+  let title = 'Enter PIN';
+  if (action === 'togglePaid') title = 'Enter PIN to Change Payment Status';
+  else if (action === 'deleteInvoice') title = 'Enter PIN to Delete Invoice';
+  else if (action === 'clearHistory') title = 'Enter PIN to Clear All History';
+  
+  document.getElementById('pin-modal-title').textContent = title;
+  document.getElementById('pin-input').value = '';
+  document.getElementById('pin-modal').style.display = 'flex';
+  document.getElementById('pin-input').focus();
+}
+
+// Hide PIN modal
+function hidePinModal() {
+  document.getElementById('pin-modal').style.display = 'none';
+}
+
+// Verify PIN and execute action
+function verifyPinAndExecute() {
+  const enteredPin = document.getElementById('pin-input').value;
+  
+  if (enteredPin === currentPin) {
+    hidePinModal();
+    
+    if (currentPinAction === 'togglePaid' && currentInvoiceId) {
+      togglePaidStatus(currentInvoiceId);
+    } 
+    else if (currentPinAction === 'deleteInvoice' && currentInvoiceId) {
+      deleteInvoice(currentInvoiceId);
+    }
+    else if (currentPinAction === 'clearHistory') {
+      clearAllHistory();
+    }
+  } else {
+    alert('Incorrect PIN!');
+    document.getElementById('pin-input').value = '';
+    document.getElementById('pin-input').focus();
+  }
+}
+
+// Toggle paid status
+function togglePaidStatus(id) {
+  const invoiceIndex = invoices.findIndex(inv => inv.id === id);
+  if (invoiceIndex !== -1) {
+    invoices[invoiceIndex].paid = !invoices[invoiceIndex].paid;
+    localStorage.setItem('invoices', JSON.stringify(invoices));
+    showHistory();
+  }
+}
+
+// Delete single invoice
+function deleteInvoice(id) {
+  if (confirm('Are you sure you want to delete this invoice?')) {
+    invoices = invoices.filter(inv => inv.id !== id);
+    localStorage.setItem('invoices', JSON.stringify(invoices));
+    showHistory();
+  }
+}
+
+// Show confirmation for clearing all history
+function showClearHistoryConfirmation() {
+  showPinModal('clearHistory');
+}
+
+// Clear all history
+function clearAllHistory() {
+  if (confirm('Are you sure you want to delete ALL invoice history? This cannot be undone.')) {
+    invoices = [];
+    localStorage.removeItem('invoices');
+    showHistory();
+  }
+}
+
+// Sort history based on selected option
+function sortHistory() {
+  const sortBy = document.getElementById('history-sort').value;
+  
+  // Create a copy of the invoices array to sort
+  let sortedInvoices = [...invoices];
+  
+  switch(sortBy) {
+    case 'date-desc':
+      sortedInvoices.sort((a, b) => new Date(b.date) - new Date(a.date));
+      break;
+    case 'date-asc':
+      sortedInvoices.sort((a, b) => new Date(a.date) - new Date(b.date));
+      break;
+    case 'number-desc':
+      sortedInvoices.sort((a, b) => {
+        const numA = parseInt(a.number.replace(/\D/g, ''));
+        const numB = parseInt(b.number.replace(/\D/g, ''));
+        return numB - numA;
+      });
+      break;
+    case 'number-asc':
+      sortedInvoices.sort((a, b) => {
+        const numA = parseInt(a.number.replace(/\D/g, ''));
+        const numB = parseInt(b.number.replace(/\D/g, ''));
+        return numA - numB;
+      });
+      break;
+    case 'amount-desc':
+      sortedInvoices.sort((a, b) => calculateInvoiceTotal(b.items) - calculateInvoiceTotal(a.items));
+      break;
+    case 'amount-asc':
+      sortedInvoices.sort((a, b) => calculateInvoiceTotal(a.items) - calculateInvoiceTotal(b.items));
+      break;
+  }
+  
+  // Update the display with sorted invoices
+  const list = document.getElementById('history-list');
+  list.innerHTML = '';
+  
+  if (sortedInvoices.length === 0) {
+    list.innerHTML = '<p>No invoices in history</p>';
+    document.getElementById('payment-summary').style.display = 'none';
+  } else {
+    let totalReceived = 0;
+    
+    sortedInvoices.forEach(invoice => {
+      if (invoice.paid) {
+        totalReceived += calculateInvoiceTotal(invoice.items);
+      }
+      
+      const div = document.createElement('div');
+      div.className = 'history-item';
+      div.innerHTML = `
+        <button class="delete-invoice" onclick="showPinModal('deleteInvoice', ${invoice.id})">X</button>
+        <div><strong>${invoice.number}</strong> - ${formatDate(invoice.date)}</div>
+        <div style="font-size:0.8em;color:#666">${invoice.from} → ${invoice.toCompany}</div>
+        <div class="paid-toggle">
+          <label>Paid:</label>
+          <span class="paid-status ${invoice.paid ? 'paid' : ''}">${invoice.paid ? 'Yes' : 'No'}</span>
+          <button class="button small ${invoice.paid ? 'secondary' : 'success'}" onclick="showPinModal('togglePaid', ${invoice.id})">
+            ${invoice.paid ? 'Mark Unpaid' : 'Mark Paid'}
+          </button>
+        </div>
+        <div class="history-actions">
+          <button class="button secondary" onclick="loadInvoice(${invoice.id})">Edit</button>
+          <button class="button" onclick="viewPDF(${invoice.id})">View PDF</button>
+        </div>
+      `;
+      list.appendChild(div);
+    });
+    
+    // Show payment summary
+    document.getElementById('total-received').textContent = `$${totalReceived.toFixed(2)}`;
+    document.getElementById('payment-summary').style.display = 'block';
+  }
+}
+
+// Show history modal
+function showHistory() {
+  const modal = document.getElementById('history-modal');
+  document.getElementById('history-modal').style.display = 'flex';
+  sortHistory(); // Apply current sort when showing history
+}
+
+// Hide history modal
+function hideHistory() {
+  document.getElementById('history-modal').style.display = 'none';
+}
+
+// Hide PDF modal
+function hidePDF() {
+  document.getElementById('pdf-modal').style.display = 'none';
+}
+
+// Load invoice from history into form
+function loadInvoice(id) {
+  const invoice = invoices.find(inv => inv.id === id);
+  if (!invoice) return;
+
+  document.getElementById('items-container').innerHTML = '';
+  document.getElementById('invoice-number').value = invoice.number;
+  document.getElementById('invoice-date').value = invoice.date;
+  document.getElementById('from-name').value = invoice.from;
+  document.getElementById('to-company').value = invoice.toCompany;
+  document.getElementById('to-name').value = invoice.toName;
+
+  invoice.items.forEach(item => {
+    addItem(item.serviceIndex, item.qty, item.price);
+  });
+
+  if (invoice.watermark) {
+    watermarkData = invoice.watermark;
+    document.getElementById('watermark-preview').src = watermarkData;
+    document.getElementById('watermark-preview').style.display = 'block';
+    document.getElementById('clear-watermark').style.display = 'block';
+  } else {
+    watermarkData = null;
+    document.getElementById('watermark-preview').style.display = 'none';
+    document.getElementById('clear-watermark').style.display = 'none';
+  }
+
+  updateTotalAmount();
+  hideHistory();
+}
+
+// View PDF from history
+async function viewPDF(id) {
+  const invoice = invoices.find(inv => inv.id === id);
+  if (!invoice) return;
+
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const marginX = 20;
+  let y = 35;
+
+  if (invoice.watermark) {
+    try {
+      const img = new Image();
+      img.src = invoice.watermark;
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+      });
+      
+      const imgAspect = img.width / img.height;
+      const drawWidth = pageWidth * 0.8;
+      const drawHeight = drawWidth / imgAspect;
+      const centerX = (pageWidth - drawWidth) / 2;
+      const centerY = (doc.internal.pageSize.getHeight() - drawHeight) / 2;
+      
+      doc.setGState(new doc.GState({ opacity: 0.1 }));
+      doc.addImage(img, 'PNG', centerX, centerY, drawWidth, drawHeight);
+      doc.setGState(new doc.GState({ opacity: 1 }));
+    } catch (e) {
+      console.error("Error loading watermark image:", e);
+    }
+  }
+
+  doc.setFontSize(22);
+  doc.setFont(undefined, 'bold');
+  doc.text("Invoice", marginX, y);
+
+  doc.setFontSize(12);
+  doc.setFont(undefined, 'normal');
+  doc.text(`Invoice #: ${invoice.number}`, pageWidth - marginX - 50, y);
+  doc.text(`Date: ${formatDate(invoice.date)}`, pageWidth - marginX - 50, y + 7);
+  y += 20;
+
+  doc.setFont(undefined, 'bold');
+  doc.text("From", marginX, y);
+  doc.text("To", pageWidth / 2, y);
+  doc.setFont(undefined, 'normal');
+  y += 6;
+  doc.text(invoice.from, marginX, y);
+  doc.text(invoice.toCompany, pageWidth / 2, y);
+  y += 6;
+  doc.setFont(undefined, 'bold');
+  doc.text("Customer:", pageWidth / 2, y);
+  doc.setFont(undefined, 'normal');
+  doc.text(invoice.toName, pageWidth / 2 + 25, y);
+  y += 12;
+
+  const headers = ["Description", "Qty", "Unit Price", "Total"];
+  const colWidths = [100, 20, 30, 30];
+  const startX = marginX;
+  let rowHeight = 10;
+
+  doc.setFillColor(0, 122, 255);
+  doc.setTextColor(255, 255, 255);
+  doc.setFont(undefined, 'bold');
+  doc.rect(startX, y, colWidths.reduce((a, b) => a + b), rowHeight, 'F');
+
+  let x = startX;
+  headers.forEach((text, i) => {
+    doc.text(text, x + 2, y + 7);
+    x += colWidths[i];
+  });
+
+  y += rowHeight;
+  doc.setFont(undefined, 'normal');
+  doc.setTextColor(0, 0, 0);
+
+  let total = 0;
+  invoice.items.forEach(item => {
+    const desc = item.desc || '';
+    const qty = parseFloat(item.qty || 0);
+    const price = parseFloat(item.price || 0);
+    const lineTotal = qty * price;
+    total += lineTotal;
+
+    const values = [
+      desc, 
+      qty.toString(), 
+      `$${price.toFixed(2)}`, 
+      `$${lineTotal.toFixed(2)}`
+    ];
+    
+    x = startX;
+    values.forEach((val, i) => {
+      doc.rect(x, y, colWidths[i], rowHeight);
+      doc.text(val, x + 2, y + 7);
+      x += colWidths[i];
+    });
+    y += rowHeight;
+  });
+
+  y += 10;
+  doc.setFont(undefined, 'bold');
+  doc.setFontSize(14);
+  doc.text(`Total: $${total.toFixed(2)}`, pageWidth - marginX - 4, y, { align: 'right' });
+
+  if (invoice.paid) {
+    doc.setFontSize(16);
+    doc.setTextColor(40, 167, 69);
+    doc.text("PAID", pageWidth - marginX - 4, y + 10, { align: 'right' });
+  }
+
+  const pdfUrl = doc.output('bloburl');
+  document.getElementById('pdf-viewer').src = pdfUrl;
+  document.getElementById('pdf-modal').style.display = 'flex';
+}
+
+// Generate PDF
+async function generatePDF() {
+  const invoiceNumber = getAndIncrementInvoiceNumber();
+  document.getElementById('invoice-number').value = invoiceNumber;
+  
+  const doc = new jsPDF({ unit: "mm", format: "a4" });
+  const get = id => document.getElementById(id).value;
+  const pageWidth = doc.internal.pageSize.getWidth();
+  const marginX = 20;
+  let y = 35;
+
+  if (watermarkData) {
+    try {
+      const img = new Image();
+      img.src = watermarkData;
+      await new Promise((resolve, reject) => {
+        img.onload = resolve;
+        img.onerror = reject;
+      });
+      
+      const imgAspect = img.width / img.height;
+      const drawWidth = pageWidth * 0.8;
+      const drawHeight = drawWidth / imgAspect;
+      const centerX = (pageWidth - drawWidth) / 2;
+      const centerY = (doc.internal.pageSize.getHeight() - drawHeight) / 2;
+      
+      doc.setGState(new doc.GState({ opacity: 0.1 }));
+      doc.addImage(img, 'PNG', centerX, centerY, drawWidth, drawHeight);
+      doc.setGState(new doc.GState({ opacity: 1 }));
+    } catch (e) {
+      console.error("Error loading watermark image:", e);
+    }
+  }
+
+  doc.setFontSize(22);
+  doc.setFont(undefined, 'bold');
+  doc.text("Invoice", marginX, y);
+
+  doc.setFontSize(12);
+  doc.setFont(undefined, 'normal');
+  doc.text(`Invoice #: ${invoiceNumber}`, pageWidth - marginX - 50, y);
+  doc.text(`Date: ${formatDate(get('invoice-date'))}`, pageWidth - marginX - 50, y + 7);
+  y += 20;
+
+  doc.setFont(undefined, 'bold');
+  doc.text("From", marginX, y);
+  doc.text("To", pageWidth / 2, y);
+  doc.setFont(undefined, 'normal');
+  y += 6;
+  doc.text(get('from-name'), marginX, y);
+  doc.text(get('to-company'), pageWidth / 2, y);
+  y += 6;
+  doc.setFont(undefined, 'bold');
+  doc.text("Customer:", pageWidth / 2, y);
+  doc.setFont(undefined, 'normal');
+  doc.text(get('to-name'), pageWidth / 2 + 25, y);
+  y += 12;
+
+  const headers = ["Description", "Qty", "Unit Price", "Total"];
+  const colWidths = [100, 20, 30, 30];
+  const startX = marginX;
+  let rowHeight = 10;
+
+  doc.setFillColor(0, 122, 255);
+  doc.setTextColor(255, 255, 255);
+  doc.setFont(undefined, 'bold');
+  doc.rect(startX, y, colWidths.reduce((a, b) => a + b), rowHeight, 'F');
+
+  let x = startX;
+  headers.forEach((text, i) => {
+    doc.text(text, x + 2, y + 7);
+    x += colWidths[i];
+  });
+
+  y += rowHeight;
+  doc.setFont(undefined, 'normal');
+  doc.setTextColor(0, 0, 0);
+
+  let total = 0;
+  const items = document.querySelectorAll('#items-container .card');
+  items.forEach(card => {
+    const serviceSelect = card.querySelector('.service-select');
+    const desc = serviceSelect ? serviceSelect.options[serviceSelect.selectedIndex].text : '';
+    const qty = parseFloat(card.querySelector('.qty').value || 0);
+    const price = parseFloat(card.querySelector('.price').value || 0);
+    const lineTotal = qty * price;
+    total += lineTotal;
+
+    const values = [
+      desc, 
+      qty.toString(), 
+      `$${price.toFixed(2)}`, 
+      `$${lineTotal.toFixed(2)}`
+    ];
+    
+    x = startX;
+    values.forEach((val, i) => {
+      doc.rect(x, y, colWidths[i], rowHeight);
+      doc.text(val, x + 2, y + 7);
+      x += colWidths[i];
+    });
+    y += rowHeight;
+  });
+
+  y += 10;
+  doc.setFont(undefined, 'bold');
+  doc.setFontSize(14);
+  doc.text(`Total: $${total.toFixed(2)}`, pageWidth - marginX - 4, y, { align: 'right' });
+
+  doc.save(`${invoiceNumber}.pdf`);
+  saveInvoice();
+}
+
+// Import/Export functions
+function showImportExport() {
+  document.getElementById('import-export-modal').style.display = 'flex';
+  document.getElementById('import-message').style.display = 'none';
+  switchImportExportTab('export-tab');
+  updateExportData();
+}
+
+function hideImportExport() {
+  document.getElementById('import-export-modal').style.display = 'none';
+}
+
+function switchImportExportTab(tabId) {
+  document.querySelectorAll('.import-export-tab').forEach(tab => {
+    tab.classList.remove('active');
+  });
+  document.querySelectorAll('.import-export-tab-content').forEach(content => {
+    content.classList.remove('active');
+  });
+  
+  document.querySelector(`.import-export-tab[onclick="switchImportExportTab('${tabId}')"]`).classList.add('active');
+  document.getElementById(tabId).classList.add('active');
+}
+
+function updateExportData() {
+  const exportData = {
+    invoices: JSON.parse(localStorage.getItem('invoices')) || [],
+    services: JSON.parse(localStorage.getItem('sewingServices')) || [],
+    watermark: localStorage.getItem('watermarkImage') || null,
+    currentInvoiceNumber: localStorage.getItem('currentInvoiceNumber') || 'INV-001',
+    appPin: localStorage.getItem('appPin') || '1234'
+  };
+  
+  document.getElementById('export-data').value = JSON.stringify(exportData, null, 2);
+}
+
+function exportData() {
+  const data = document.getElementById('export-data').value;
+  const blob = new Blob([data], { type: 'application/json' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `sewing-invoice-data-${new Date().toISOString().split('T')[0]}.json`;
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+}
+
+function copyToClipboard(elementId) {
+  const textarea = document.getElementById(elementId);
+  textarea.select();
+  document.execCommand('copy');
+  
+  const messageEl = document.getElementById('import-message');
+  messageEl.textContent = 'Data copied to clipboard!';
+  messageEl.className = 'message success';
+  messageEl.style.display = 'block';
+  
+  setTimeout(() => {
+    messageEl.style.display = 'none';
+  }, 3000);
+}
+
+function importData() {
+  const messageEl = document.getElementById('import-message');
+  messageEl.style.display = 'none';
+  
+  let importData;
+  
+  // Check if file was uploaded
+  const fileInput = document.getElementById('import-file');
+  if (fileInput.files.length > 0) {
+    const file = fileInput.files[0];
+    const reader = new FileReader();
+    
+    reader.onload = function(e) {
+      try {
+        importData = JSON.parse(e.target.result);
+        processImportedData(importData, messageEl);
+      } catch (e) {
+        showImportError(messageEl, 'Invalid file format. Please upload a valid JSON file.');
+      }
+    };
+    
+    reader.onerror = function() {
+      showImportError(messageEl, 'Error reading file. Please try again.');
+    };
+    
+    reader.readAsText(file);
+  } else {
+    // Use textarea content
+    try {
+      importData = JSON.parse(document.getElementById('import-data').value);
+      processImportedData(importData, messageEl);
+    } catch (e) {
+      showImportError(messageEl, 'Invalid JSON data. Please check your input.');
+    }
+  }
+}
+
+function processImportedData(data, messageEl) {
+  if (!data || (typeof data !== 'object')) {
+    showImportError(messageEl, 'Invalid data format.');
+    return;
+  }
+  
+  // Ask for confirmation before importing
+  if (!confirm('This will overwrite your current data. Are you sure you want to continue?')) {
+    return;
+  }
+  
+  try {
+    // Import data fields if they exist
+    if (data.invoices) {
+      localStorage.setItem('invoices', JSON.stringify(data.invoices));
+      invoices = data.invoices;
+    }
+    
+    if (data.services) {
+      localStorage.setItem('sewingServices', JSON.stringify(data.services));
+      sewingServices = data.services;
+    }
+    
+    if (data.watermark) {
+      localStorage.setItem('watermarkImage', data.watermark);
+      watermarkData = data.watermark;
+    }
+    
+    if (data.currentInvoiceNumber) {
+      localStorage.setItem('currentInvoiceNumber', data.currentInvoiceNumber);
+      currentInvoiceNumber = data.currentInvoiceNumber;
+    }
+    
+    if (data.appPin) {
+      localStorage.setItem('appPin', data.appPin);
+      currentPin = data.appPin;
+    }
+    
+    // Update UI
+    if (watermarkData) {
+      document.getElementById('watermark-preview').src = watermarkData;
+      document.getElementById('watermark-preview').style.display = 'block';
+      document.getElementById('clear-watermark').style.display = 'block';
+    }
+    
+    // Show success message
+    messageEl.textContent = 'Data imported successfully!';
+    messageEl.className = 'message success';
+    messageEl.style.display = 'block';
+    
+    // Clear file input
+    document.getElementById('import-file').value = '';
+    document.getElementById('import-data').value = '';
+    
+    // Refresh services list if in settings
+    if (document.getElementById('settings-modal').style.display === 'flex') {
+      renderServicesList();
+    }
+    
+    // Refresh history if open
+    if (document.getElementById('history-modal').style.display === 'flex') {
+      showHistory();
+    }
+    
+  } catch (e) {
+    showImportError(messageEl, 'Error importing data: ' + e.message);
+  }
+}
+
+function showImportError(messageEl, text) {
+  messageEl.textContent = text;
+  messageEl.className = 'message error';
+  messageEl.style.display = 'block';
+}
+
+// Settings functions
+function switchSettingsTab(tabId) {
+  document.querySelectorAll('.settings-tab').forEach(tab => {
+    tab.classList.remove('active');
+  });
+  document.querySelectorAll('.settings-tab-content').forEach(content => {
+    content.classList.remove('active');
+  });
+  
+  document.querySelector(`.settings-tab[onclick="switchSettingsTab('${tabId}')"]`).classList.add('active');
+  document.getElementById(tabId).classList.add('active');
+}
+
+function renderServicesList() {
+  const servicesList = document.getElementById('services-list');
+  servicesList.innerHTML = '';
+  
+  if (sewingServices.length === 0) {
+    servicesList.innerHTML = '<p>No services available. Add your first service.</p>';
+    return;
+  }
+  
+  sewingServices.forEach((service, index) => {
+    const serviceItem = document.createElement('div');
+    serviceItem.className = 'service-item';
+    serviceItem.innerHTML = `
+      <div class="service-details">
+        <div class="service-category">${service.category}</div>
+        <div class="service-description">${service.description}</div>
+      </div>
+      <div class="service-price">$${service.price.toFixed(2)}</div>
+      <div class="service-unit">${service.unit}</div>
+      <div class="service-actions">
+        <button class="button small service-edit-btn" onclick="editService(${index})">Edit</button>
+        <button class="button small danger service-delete-btn" onclick="deleteService(${index})">Delete</button>
+      </div>
+    `;
+    servicesList.appendChild(serviceItem);
+  });
+}
+
+function editService(index) {
+  const service = sewingServices[index];
+  currentEditingServiceIndex = index;
+  
+  document.getElementById('service-category').value = service.category;
+  document.getElementById('service-description').value = service.description;
+  document.getElementById('service-price').value = service.price;
+  document.getElementById('service-unit').value = service.unit;
+  
+  document.getElementById('service-form-title').textContent = 'Edit Service';
+  document.getElementById('service-save-btn').textContent = 'Update Service';
+  document.getElementById('service-cancel-btn').style.display = 'block';
+  
+  // Scroll to form
+  document.getElementById('service-form').scrollIntoView({ behavior: 'smooth' });
+}
+
+function cancelServiceEdit() {
+  currentEditingServiceIndex = -1;
+  resetServiceForm();
+}
+
+function resetServiceForm() {
+  document.getElementById('service-category').value = '';
+  document.getElementById('service-description').value = '';
+  document.getElementById('service-price').value = '';
+  document.getElementById('service-unit').value = '';
+  
+  document.getElementById('service-form-title').textContent = 'Add New Service';
+  document.getElementById('service-save-btn').textContent = 'Save Service';
+  document.getElementById('service-cancel-btn').style.display = 'none';
+}
+
+function saveService() {
+  const category = document.getElementById('service-category').value.trim();
+  const description = document.getElementById('service-description').value.trim();
+  const price = parseFloat(document.getElementById('service-price').value);
+  const unit = document.getElementById('service-unit').value.trim();
+  
+  if (!category || !description || isNaN(price) || !unit) {
+    alert('Please fill in all fields with valid values');
+    return;
+  }
+  
+  const service = { category, description, price, unit };
+  
+  if (currentEditingServiceIndex >= 0) {
+    // Update existing service
+    sewingServices[currentEditingServiceIndex] = service;
+  } else {
+    // Add new service
+    sewingServices.push(service);
+  }
+  
+  // Save to localStorage
+  localStorage.setItem('sewingServices', JSON.stringify(sewingServices));
+  
+  // Refresh the list and reset form
+  renderServicesList();
+  resetServiceForm();
+  currentEditingServiceIndex = -1;
+  
+  // Show success message
+  const messageEl = document.getElementById('pin-change-message');
+  messageEl.textContent = `Service ${currentEditingServiceIndex >= 0 ? 'updated' : 'added'} successfully!`;
+  messageEl.className = 'message success';
+  messageEl.style.display = 'block';
+  
+  // Hide message after 3 seconds
+  setTimeout(() => {
+    messageEl.style.display = 'none';
+  }, 3000);
+}
+
+function deleteService(index) {
+  if (confirm('Are you sure you want to delete this service?')) {
+    sewingServices.splice(index, 1);
+    localStorage.setItem('sewingServices', JSON.stringify(sewingServices));
+    renderServicesList();
+    
+    // If we were editing this service, cancel the edit
+    if (currentEditingServiceIndex === index) {
+      cancelServiceEdit();
+    } else if (currentEditingServiceIndex > index) {
+      currentEditingServiceIndex--;
+    }
+    
+    // Show success message
+    const messageEl = document.getElementById('pin-change-message');
+    messageEl.textContent = 'Service deleted successfully!';
+    messageEl.className = 'message success';
+    messageEl.style.display = 'block';
+    
+    // Hide message after 3 seconds
+    setTimeout(() => {
+      messageEl.style.display = 'none';
+    }, 3000);
+  }
+}
+
+function showSettings() {
+  document.getElementById('settings-modal').style.display = 'flex';
+  document.getElementById('pin-change-message').style.display = 'none';
+  document.getElementById('current-pin').value = '';
+  document.getElementById('new-pin').value = '';
+  document.getElementById('confirm-pin').value = '';
+  document.getElementById('current-pin').focus();
+  
+  // Reset to PIN tab and render services list
+  switchSettingsTab('pin-tab');
+  renderServicesList();
+  resetServiceForm();
+}
+
+function hideSettings() {
+  document.getElementById('settings-modal').style.display = 'none';
+}
+
+function changePin() {
+  const currentPinInput = document.getElementById('current-pin').value;
+  const newPin = document.getElementById('new-pin').value;
+  const confirmPin = document.getElementById('confirm-pin').value;
+  
+  const messageEl = document.getElementById('pin-change-message');
+  messageEl.style.display = 'none';
+  
+  // Validate inputs
+  if (!currentPinInput || !newPin || !confirmPin) {
+    messageEl.textContent = 'Please fill in all fields';
+    messageEl.className = 'message error';
+    messageEl.style.display = 'block';
+    return;
+  }
+  
+  if (currentPinInput !== currentPin) {
+    messageEl.textContent = 'Current PIN is incorrect';
+    messageEl.className = 'message error';
+    messageEl.style.display = 'block';
+    document.getElementById('current-pin').focus();
+    return;
+  }
+  
+  if (newPin !== confirmPin) {
+    messageEl.textContent = 'New PIN and confirmation do not match';
+    messageEl.className = 'message warning';
+    messageEl.style.display = 'block';
+    document.getElementById('confirm-pin').focus();
+    return;
+  }
+  
+  if (newPin.length !== 4 || !/^\d+$/.test(newPin)) {
+    messageEl.textContent = 'PIN must be 4 digits';
+    messageEl.className = 'message error';
+    messageEl.style.display = 'block';
+    document.getElementById('new-pin').focus();
+    return;
+  }
+  
+  // Change the PIN
+  currentPin = newPin;
+  localStorage.setItem('appPin', newPin);
+  
+  messageEl.textContent = 'PIN changed successfully!';
+  messageEl.className = 'message success';
+  messageEl.style.display = 'block';
+  
+  // Clear fields after success
+  document.getElementById('current-pin').value = '';
+  document.getElementById('new-pin').value = '';
+  document.getElementById('confirm-pin').value = '';
+}
+
+function forgotPin() {
+  if (confirm('Are you sure you want to reset your PIN? This will reset it to the default (1234).')) {
+    currentPin = '1234';
+    localStorage.removeItem('appPin');
+    
+    const messageEl = document.getElementById('pin-change-message');
+    messageEl.textContent = 'PIN has been reset to default (1234). Please change it immediately.';
+    messageEl.className = 'message success';
+    messageEl.style.display = 'block';
+    
+    document.getElementById('current-pin').value = '';
+    document.getElementById('new-pin').value = '';
+    document.getElementById('confirm-pin').value = '';
+  }
+}
+
+// Initialize on page load
+window.onload = function() {
+  document.getElementById('invoice-number').value = getCurrentInvoiceNumber();
+  setCurrentDate();
+  addItem();
+  
+  if (watermarkData) {
+    document.getElementById('watermark-preview').src = watermarkData;
+    document.getElementById('watermark-preview').style.display = 'block';
+    document.getElementById('clear-watermark').style.display = 'block';
+  }
+  
+  document.getElementById('invoice-date').addEventListener('change', function() {
+    if (!this.value) setCurrentDate();
+  });
+  
+  // Set up PIN confirmation handler
+  document.getElementById('pin-confirm').addEventListener('click', verifyPinAndExecute);
+  document.getElementById('pin-input').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+      verifyPinAndExecute();
+    }
+  });
+  
+  // Set up PIN change form submission on Enter
+  document.getElementById('confirm-pin').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+      changePin();
+    }
+  });
+  
+  // Set up service form submission on Enter
+  document.getElementById('service-unit').addEventListener('keypress', function(e) {
+    if (e.key === 'Enter') {
+      saveService();
+    }
+  });
+  
+  // Set up import file change handler
+  document.getElementById('import-file').addEventListener('change', function() {
+    if (this.files.length > 0) {
+      document.getElementById('import-data').value = '';
+    }
+  });
+};
+</script>
+</body>
+</html>
